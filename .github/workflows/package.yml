@@ -1,4 +1,3 @@
-
 name: Package
 
 on:
@@ -64,7 +63,7 @@ jobs:
 
       - name: ccache prolog
         run: |-
-          cmake -E make_directory ${{github.workspace}}\vcpkg
+          cmake -E make_directory ${{github.workspace}}\vpkg
           cmake -E make_directory ${{github.workspace}}\build
 
       - name: Configure
@@ -112,6 +111,27 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Strip Intel MKL from vcpkg.json for ARM64
+        shell: powershell
+        run: |
+          if (Test-Path vcpkg.json) {
+            $content = Get-Content vcpkg.json -Raw | ConvertFrom-Json
+            if ($content.dependencies -ne $null) {
+              $newDeps = @()
+              foreach ($dep in $content.dependencies) {
+                if ($dep -is [string] -and $dep -ne "intel-mkl") {
+                  $newDeps += $dep
+                } elseif ($dep -is [System.Management.Automation.PSCustomObject] -and $dep.name -ne "intel-mkl") {
+                  $newDeps += $dep
+                }
+              }
+              $content.dependencies = $newDeps
+            }
+            $jsonString = $content | ConvertTo-Json -Depth 100
+            [System.IO.File]::WriteAllText((Get-Item vcpkg.json).FullName, $jsonString, (New-Object System.Text.UTF8Encoding($false)))
+            Write-Host "Successfully stripped intel-mkl from vcpkg.json configuration"
+          }
+
       - name: Download ccache
         shell: cmake -P {0}
         run: |
@@ -147,7 +167,7 @@ jobs:
 
       - name: ccache prolog
         run: |-
-          cmake -E make_directory ${{github.workspace}}\vcpkg
+          cmake -E make_directory ${{github.workspace}}\vpkg
           cmake -E make_directory ${{github.workspace}}\build
 
       - name: Configure
@@ -263,18 +283,32 @@ jobs:
           
       - name: Setup Multi-Arch APT Repositories
         run: |
-          # 1. Enable arm64 target architecture within the manager
+          # 1. Register arm64 target architecture
           sudo dpkg --add-architecture arm64
           
-          # 2. Modify existing sources to strictly query amd64/i386 architecture variations 
-          sudo find /etc/apt/sources.list /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i 's/deb http/deb [arch=amd64,i386] http/g' {} +
-          sudo find /etc/apt/sources.list.d/ -type f -name "*.sources" -exec sed -i 's/Architectures: /Architectures: amd64 /g' {} +
+          # 2. Fix legacy .list files (handles both http and https targets)
+          if [ -d /etc/apt/sources.list.d ]; then
+            sudo find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i -E 's/^deb (http|https):/deb [arch=amd64,i386] \1:/g' {} +
+          fi
+          if [ -f /etc/apt/sources.list ]; then
+            sudo sed -i -E 's/^deb (http|https):/deb [arch=amd64,i386] \1:/g' /etc/apt/sources.list
+          fi
 
-          # 3. Inject explicit ports.ubuntu.com mirror sources mapped exclusively for ARM64 compiling dependencies
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ noble main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/arm64-ports.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ noble-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ noble-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ noble-backports main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/arm64-ports.list
+          # 3. Patch Ubuntu 24.04 DEB822 file formatting entirely to avoid arm64 leaks on main mirrors
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i '/^Architectures:/d' /etc/apt/sources.list.d/ubuntu.sources
+            sudo sed -i 's/Types: deb/Types: deb\nArchitectures: amd64 i386/g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+
+          # 4. Inject clean target specifications targeting ports.ubuntu.com for arm64 exclusively
+          sudo tee /etc/apt/sources.list.d/arm64-ports.sources <<EOF
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports/
+          Suites: noble noble-updates noble-security noble-backports
+          Components: main restricted universe multiverse
+          Architectures: arm64
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
 
           sudo apt-get update
 
