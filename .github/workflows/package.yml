@@ -111,27 +111,24 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Strip Intel MKL from vcpkg.json for ARM64
-        shell: powershell
+      - name: Strip Intel MKL from vcpkg.json (Python Fix)
+        shell: python
         run: |
-          if (Test-Path vcpkg.json) {
-            Write-Host "Lese vcpkg.json ein, um MKL für ARM64 zu entfernen..."
-            $content = Get-Content vcpkg.json -Raw | ConvertFrom-Json
-            if ($content.dependencies -ne $null) {
-              $newDeps = @()
-              foreach ($dep in $content.dependencies) {
-                if ($dep -is [string] -and $dep -ne "intel-mkl") {
-                  $newDeps += $dep
-                } elseif ($dep -is [System.Management.Automation.PSCustomObject] -and $dep.name -ne "intel-mkl") {
-                  $newDeps += $dep
-                }
-              }
-              $content.dependencies = $newDeps
-            }
-            $jsonString = $content | ConvertTo-Json -Depth 100
-            [System.IO.File]::WriteAllText((Get-Item vcpkg.json).FullName, $jsonString, (New-Object System.Text.UTF8Encoding($false)))
-            Write-Host "intel-mkl erfolgreich aus dem Manifest entfernt!"
-          }
+          import json
+          import os
+          if os.path.exists('vcpkg.json'):
+              print("Lese vcpkg.json ein...")
+              with open('vcpkg.json', 'r', encoding='utf-8') as f:
+                  data = json.load(f)
+              if 'dependencies' in data:
+                  # Filtert intel-mkl sauber heraus, egal ob String oder Object-Deklaration
+                  data['dependencies'] = [
+                      d for d in data['dependencies'] 
+                      if (isinstance(d, str) and d != 'intel-mkl') or (isinstance(d, dict) and d.get('name') != 'intel-mkl')
+                  ]
+              with open('vcpkg.json', 'w', encoding='utf-8') as f:
+                  json.dump(data, f, indent=2)
+              print("intel-mkl erfolgreich und strukturell sauber entfernt!")
 
       - name: Download ccache
         shell: cmake -P {0}
@@ -174,10 +171,7 @@ jobs:
       - name: Configure
         working-directory: ${{github.workspace}}/build
         run: |
-          cmake .. -G "Visual Studio 17 2022" -A ARM64 -Thost=x64 -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=OFF -DVCPKG_TARGET_TRIPLET='arm64-windows-static' `
-                -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"  `
-                -DCMAKE_CXX_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe `
-                -DCMAKE_C_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe
+          cmake .. -G "Visual Studio 17 2022" -A ARM64 -Thost=x64 -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=OFF -DVCPKG_TARGET_TRIPLET="arm64-windows-static" -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" -DCMAKE_CXX_COMPILER_LAUNCHER="${{github.workspace}}\ccache.exe" -DCMAKE_C_COMPILER_LAUNCHER="${{github.workspace}}\ccache.exe"
         shell: powershell
 
       - name: Build
@@ -282,26 +276,26 @@ jobs:
         with:
           submodules: recursive
           
-      - name: Setup Multi-Arch APT Repositories
+      - name: Setup Multi-Arch APT Repositories (Sanitized)
         run: |
           # 1. ARM64 Architektur registrieren
           sudo dpkg --add-architecture arm64
           
-          # 2. Bestehende DEB822 (.sources) Dateien radikal auf amd64/i386 festnageln
-          if [ -d /etc/apt/sources.list.d ]; then
-            sudo find /etc/apt/sources.list.d/ -type f -name "*.sources" -exec sed -i '/^Architectures:/d' {} +
-            sudo find /etc/apt/sources.list.d/ -type f -name "*.sources" -exec sed -i 's/Types: deb/Types: deb\nArchitectures: amd64 i386/g' {} +
-          fi
+          # 2. Drittanbieter-Repositories wegsichern, um Fehler 100 zu vermeiden
+          sudo mkdir -p /etc/apt/sources.list.d.bak
+          sudo mv /etc/apt/sources.list.d/* /etc/apt/sources.list.d.bak/ || true
 
-          # 3. Klassische .list Quellen absichern (falls vorhanden, fängt http und https ab)
-          if [ -f /etc/apt/sources.list ]; then
-            sudo sed -i -E 's/^deb (http|https):/deb [arch=amd64,i386] \1:/g' /etc/apt/sources.list
-          fi
-          if [ -d /etc/apt/sources.list.d ]; then
-            sudo find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i -E 's/^deb (http|https):/deb [arch=amd64,i386] \1:/g' {} +
-          fi
+          # 3. Saubere Standard-Ubuntu-Quellen für amd64 anlegen
+          sudo tee /etc/apt/sources.list.d/ubuntu.sources <<EOF
+          Types: deb
+          URIs: http://archive.ubuntu.com/ubuntu/ http://security.ubuntu.com/ubuntu/
+          Suites: noble noble-updates noble-security noble-backports
+          Components: main restricted universe multiverse
+          Architectures: amd64 i386
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
 
-          # 4. Sauberes, dediziertes ARM64-Repository über ports.ubuntu.com injizieren
+          # 4. Saubere Ubuntu-Quellen für arm64 (ports) anlegen
           sudo tee /etc/apt/sources.list.d/arm64-ports.sources <<EOF
           Types: deb
           URIs: http://ports.ubuntu.com/ubuntu-ports/
@@ -367,11 +361,11 @@ jobs:
       - name: Build from source
         working-directory: build
         run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
-        
+          
       - name: Install
         working-directory: build
         run: cmake --install . --prefix "../libs/runtimes/linux-arm64/native" --component bergamot_translator_dynamic
-        
+          
       - uses: actions/upload-artifact@v4
         with:
           name: libs-linux-arm64
