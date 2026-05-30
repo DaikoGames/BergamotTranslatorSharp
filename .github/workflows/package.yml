@@ -115,6 +115,7 @@ jobs:
         shell: powershell
         run: |
           if (Test-Path vcpkg.json) {
+            Write-Host "Lese vcpkg.json ein, um MKL für ARM64 zu entfernen..."
             $content = Get-Content vcpkg.json -Raw | ConvertFrom-Json
             if ($content.dependencies -ne $null) {
               $newDeps = @()
@@ -129,7 +130,7 @@ jobs:
             }
             $jsonString = $content | ConvertTo-Json -Depth 100
             [System.IO.File]::WriteAllText((Get-Item vcpkg.json).FullName, $jsonString, (New-Object System.Text.UTF8Encoding($false)))
-            Write-Host "Successfully stripped intel-mkl from vcpkg.json configuration"
+            Write-Host "intel-mkl erfolgreich aus dem Manifest entfernt!"
           }
 
       - name: Download ccache
@@ -283,24 +284,24 @@ jobs:
           
       - name: Setup Multi-Arch APT Repositories
         run: |
-          # 1. Register arm64 target architecture
+          # 1. ARM64 Architektur registrieren
           sudo dpkg --add-architecture arm64
           
-          # 2. Fix legacy .list files (handles both http and https targets)
+          # 2. Bestehende DEB822 (.sources) Dateien radikal auf amd64/i386 festnageln
           if [ -d /etc/apt/sources.list.d ]; then
-            sudo find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i -E 's/^deb (http|https):/deb [arch=amd64,i386] \1:/g' {} +
+            sudo find /etc/apt/sources.list.d/ -type f -name "*.sources" -exec sed -i '/^Architectures:/d' {} +
+            sudo find /etc/apt/sources.list.d/ -type f -name "*.sources" -exec sed -i 's/Types: deb/Types: deb\nArchitectures: amd64 i386/g' {} +
           fi
+
+          # 3. Klassische .list Quellen absichern (falls vorhanden, fängt http und https ab)
           if [ -f /etc/apt/sources.list ]; then
             sudo sed -i -E 's/^deb (http|https):/deb [arch=amd64,i386] \1:/g' /etc/apt/sources.list
           fi
-
-          # 3. Patch Ubuntu 24.04 DEB822 file formatting entirely to avoid arm64 leaks on main mirrors
-          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-            sudo sed -i '/^Architectures:/d' /etc/apt/sources.list.d/ubuntu.sources
-            sudo sed -i 's/Types: deb/Types: deb\nArchitectures: amd64 i386/g' /etc/apt/sources.list.d/ubuntu.sources
+          if [ -d /etc/apt/sources.list.d ]; then
+            sudo find /etc/apt/sources.list.d/ -type f -name "*.list" -exec sed -i -E 's/^deb (http|https):/deb [arch=amd64,i386] \1:/g' {} +
           fi
 
-          # 4. Inject clean target specifications targeting ports.ubuntu.com for arm64 exclusively
+          # 4. Sauberes, dediziertes ARM64-Repository über ports.ubuntu.com injizieren
           sudo tee /etc/apt/sources.list.d/arm64-ports.sources <<EOF
           Types: deb
           URIs: http://ports.ubuntu.com/ubuntu-ports/
