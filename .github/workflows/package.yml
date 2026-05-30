@@ -152,7 +152,7 @@ jobs:
       - name: Configure
         working-directory: ${{github.workspace}}/build
         run: |
-          cmake .. -G "Visual Studio 17 2022" -A ARM64 -Thost=x64 -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DVCPKG_TARGET_TRIPLET='arm64-windows-static' `
+          cmake .. -G "Visual Studio 17 2022" -A ARM64 -Thost=x64 -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=OFF -DVCPKG_TARGET_TRIPLET='arm64-windows-static' `
                 -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"  `
                 -DCMAKE_CXX_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe `
                 -DCMAKE_C_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe
@@ -260,16 +260,26 @@ jobs:
         with:
           submodules: recursive
           
-      - name: Install Cross-Compile Dependencies
-        run: |-
+      - name: Setup Multi-Arch APT Repositories
+        run: |
           sudo dpkg --add-architecture arm64
+          sudo sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list
+          sudo cp /etc/apt/sources.list /etc/apt/sources.list.d/arm64.list
+          sudo sed -i -e 's/http:\/\/archive.ubuntu.com\/ubuntu\//http:\/\/ports.ubuntu.com\/ubuntu-ports\//g' \
+                      -e 's/http:\/\/security.ubuntu.com\/ubuntu\//http:\/\/ports.ubuntu.com\/ubuntu-ports\//g' \
+                      /etc/apt/sources.list.d/arm64.list
+          sudo sed -i 's/deb http/deb [arch=amd64,i386] http/g' /etc/apt/sources.list
+          sudo sed -i 's/deb http/deb [arch=arm64] http/g' /etc/apt/sources.list.d/arm64.list
           sudo apt-get update
+
+      - name: Install Cross-Compile Dependencies
+        run: |
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu ccache \
-                                 libprotobuf-dev:arm64 protobuf-compiler \
+                                 protobuf-compiler libprotobuf-dev:arm64 \
                                  libboost-all-dev:arm64 libunwind-dev:arm64 \
                                  libgoogle-perftools-dev:arm64 libopenblas-dev:arm64
 
-      - name: Generate ccache_vars for ccache based on machine
+      - name: Generate ccache_vars
         shell: bash
         id: ccache_vars
         run: |-
@@ -308,7 +318,9 @@ jobs:
             -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
             -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
             -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+            -DProtobuf_PROTOC_EXECUTABLE=/usr/bin/protoc \
             -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_MKL=OFF \
             -DUSE_STATIC_LIBS=ON
             
       - name: Build from source
