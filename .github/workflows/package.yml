@@ -21,6 +21,8 @@ jobs:
         with:
           submodules: recursive
 
+      # Kein msvc-dev-cmd nötig, CMake findet VS automatisch
+
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1
         with:
@@ -38,7 +40,16 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -DBUILD_ARCH=corei7-avx -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DVCPKG_TARGET_TRIPLET="x64-windows-static" -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          # Wir nutzen den Standard VS Generator, erlauben ccache aber via VS Globals
+          cmake .. \
+            -DBUILD_ARCH=corei7-avx \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_STATIC_LIBS=ON \
+            -DVCPKG_TARGET_TRIPLET="x64-windows-static" \
+            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_VS_GLOBALS="TrackFileAccess=false" \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
           cmake --install . --prefix "../libs/runtimes/win-x64/native" --component bergamot_translator_dynamic
         shell: bash
@@ -77,11 +88,6 @@ jobs:
                   json.dump(data, f, indent=2)
               print("vcpkg.json erfolgreich modifiziert!")
 
-      - name: Set up MSVC x64-ARM64 Cross Tools
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: amd64_arm64
-
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1
         with:
@@ -99,13 +105,15 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -G Ninja \
+          # Übergabe von -A ARM64 zwingt den VS-Generator, korrekt für ARM64 zu cross-compilieren
+          cmake .. -A ARM64 \
             -DCMAKE_BUILD_TYPE=Release \
             -DUSE_STATIC_LIBS=ON \
             -DUSE_MKL=OFF \
             -DVCPKG_TARGET_TRIPLET="arm64-windows-static" \
             -DVCPKG_HOST_TRIPLET="x64-windows" \
             -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_VS_GLOBALS="TrackFileAccess=false" \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
@@ -177,12 +185,9 @@ jobs:
       - name: Setup Multi-Arch APT Repositories
         run: |
           sudo dpkg --add-architecture arm64
-          
-          # Wipe out existing list configuration directory noise entirely
           sudo rm -rf /etc/apt/sources.list.d/*
           sudo truncate -s 0 /etc/apt/sources.list
 
-          # Write a clean, 100% compliant DEB822 multiarch format map
           sudo tee /etc/apt/sources.list.d/ubuntu.sources <<EOF
           Types: deb
           URIs: http://archive.ubuntu.com/ubuntu/
