@@ -14,7 +14,7 @@ jobs:
     name: Build Windows x64 Native Lib
     continue-on-error: true
     env:
-      VCPKG_DEFAULT_BINARY_CACHE: "${{ github.workspace }}\\vcpkg\\"
+      VCPKG_DEFAULT_BINARY_CACHE: "${{ github.workspace }}/vcpkg"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,9 +53,7 @@ jobs:
     name: Build Windows ARM64 Native Lib
     continue-on-error: true
     env:
-      VCPKG_DEFAULT_BINARY_CACHE: "${{ github.workspace }}\\vcpkg\\"
-      VCPKG_TARGET_TRIPLET: arm64-windows-static
-      VCPKG_HOST_TRIPLET: x64-windows
+      VCPKG_DEFAULT_BINARY_CACHE: "${{ github.workspace }}/vcpkg"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,6 +77,11 @@ jobs:
                   json.dump(data, f, indent=2)
               print("vcpkg.json erfolgreich modifiziert!")
 
+      - name: Set up MSVC x64-ARM64 Cross Tools
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64_arm64
+
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1
         with:
@@ -96,7 +99,15 @@ jobs:
         run: |
           mkdir build
           cd build
-          cmake .. -G "Visual Studio 17 2022" -A ARM64 -Thost=x64 -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=OFF -DVCPKG_TARGET_TRIPLET="arm64-windows-static" -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          cmake .. -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_STATIC_LIBS=ON \
+            -DUSE_MKL=OFF \
+            -DVCPKG_TARGET_TRIPLET="arm64-windows-static" \
+            -DVCPKG_HOST_TRIPLET="x64-windows" \
+            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
           cmake --install . --prefix "../libs/runtimes/win-arm64/native" --component bergamot_translator_dynamic
         shell: bash
@@ -167,15 +178,22 @@ jobs:
         run: |
           sudo dpkg --add-architecture arm64
           
-          # Unnötige Drittanbieter-Quellen wegsichern, um 404/Exit-100 zu verhindern
-          sudo mkdir -p /etc/apt/sources.list.d.bak
-          sudo mv /etc/apt/sources.list.d/* /etc/apt/sources.list.d.bak/ || true
+          # Wipe out existing list configuration directory noise entirely
+          sudo rm -rf /etc/apt/sources.list.d/*
+          sudo truncate -s 0 /etc/apt/sources.list
 
-          # Saubere Zuweisung: Standard-Ubuntu für amd64, Ports für arm64
+          # Write a clean, 100% compliant DEB822 multiarch format map
           sudo tee /etc/apt/sources.list.d/ubuntu.sources <<EOF
           Types: deb
-          URIs: http://azure.archive.ubuntu.com/ubuntu/ http://security.ubuntu.com/ubuntu/
-          Suites: noble noble-updates noble-security noble-backports
+          URIs: http://archive.ubuntu.com/ubuntu/
+          Suites: noble noble-updates noble-backports
+          Components: main restricted universe multiverse
+          Architectures: amd64 i386
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+          Types: deb
+          URIs: http://security.ubuntu.com/ubuntu/
+          Suites: noble-security
           Components: main restricted universe multiverse
           Architectures: amd64 i386
           Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
@@ -188,8 +206,7 @@ jobs:
           Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
           EOF
 
-          # Fehler hier gezielt ignorieren, falls GitHub-interne Repos streiken
-          sudo apt-get update || true
+          sudo apt-get update
 
       - name: Install Cross-Compile Dependencies
         run: |
