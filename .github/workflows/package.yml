@@ -63,8 +63,8 @@ jobs:
 
       - name: ccache prolog
         run: |-
-          mkdir ${{github.workspace}}\vcpkg
-          mkdir ${{github.workspace}}\build
+          cmake -E make_directory ${{github.workspace}}\vcpkg
+          cmake -E make_directory ${{github.workspace}}\build
 
       - name: Configure
         working-directory: ${{github.workspace}}/build
@@ -103,7 +103,6 @@ jobs:
       CCACHE_MAXSIZE: 200M
       ccache_version: "4.5"
       VCPKG_DEFAULT_BINARY_CACHE: "${{ github.workspace }}\\vcpkg\\"
-      # FIX: Force vcpkg to explicitly use the arm64 triplet for host and target tools
       VCPKG_TARGET_TRIPLET: arm64-windows-static
       VCPKG_HOST_TRIPLET: x64-windows
     steps:
@@ -147,12 +146,11 @@ jobs:
 
       - name: ccache prolog
         run: |-
-          mkdir ${{github.workspace}}\vcpkg
-          mkdir ${{github.workspace}}\build
+          cmake -E make_directory ${{github.workspace}}\vcpkg
+          cmake -E make_directory ${{github.workspace}}\build
 
       - name: Configure
         working-directory: ${{github.workspace}}/build
-        # FIX: Explicitly passing target toolset host configurations to Visual Studio Generator
         run: |
           cmake .. -G "Visual Studio 17 2022" -A ARM64 -Thost=x64 -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DVCPKG_TARGET_TRIPLET='arm64-windows-static' `
                 -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"  `
@@ -245,7 +243,6 @@ jobs:
           path: libs/*
 
   linux-arm64:
-    # FIX: Reverted to standard ubuntu-latest to run safely on free accounts via cross-compilation toolchain
     runs-on: ubuntu-latest
     name: Build Linux ARM64 Native Lib
     continue-on-error: true
@@ -264,7 +261,6 @@ jobs:
           submodules: recursive
           
       - name: Install Cross-Compile Dependencies
-        # FIX: Explicitly installing the aarch64 cross-gcc toolset and ARM64 system variants of standard libraries
         run: |-
           sudo dpkg --add-architecture arm64
           sudo apt-get update
@@ -296,7 +292,7 @@ jobs:
           echo "CCACHE_COMPRESS=${{ env.ccache_compress }}" >> $GITHUB_ENV
           echo "CCACHE_COMPRESSLEVEL=${{ env.ccache_compresslevel }}" >> $GITHUB_ENV
           echo "CCACHE_DIR=${{ env.ccache_dir }}" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=${{ env.CCACHE_MAXSIZE }}" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=${{ env.ccache_maxsize }}" >> $GITHUB_ENV
           
       - name: ccache prolog
         run: |-
@@ -304,7 +300,6 @@ jobs:
           ccache -z
           
       - name: cmake
-        # FIX: Passed cross-compilation system definitions forcing CMake to build target architecture binaries safely
         run: |-
           mkdir -p build
           cd build
@@ -401,4 +396,3 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
-  
