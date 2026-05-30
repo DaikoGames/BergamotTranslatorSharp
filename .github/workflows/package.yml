@@ -14,13 +14,6 @@ jobs:
     name: Build Windows x64 Native Lib
     continue-on-error: true
     env:
-      CCACHE_BASEDIR: "${{ github.workspace }}"
-      CCACHE_DIR: "${{ github.workspace }}\\ccache"
-      CCACHE_COMPILERCHECK: content
-      CCACHE_COMPRESS: "true"
-      CCACHE_COMPRESSLEVEL: 9
-      CCACHE_MAXSIZE: 200M
-      ccache_version: "4.5"
       VCPKG_DEFAULT_BINARY_CACHE: "${{ github.workspace }}\\vcpkg\\"
     steps:
       - name: Checkout
@@ -28,62 +21,27 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Download ccache
-        shell: cmake -P {0}
-        run: |
-          set(ccache_url "https://github.com/cristianadam/ccache/releases/download/v${{ env.ccache_version }}/${{ runner.os }}.tar.xz")
-          file(DOWNLOAD "${ccache_url}" ./ccache.tar.xz SHOW_PROGRESS)
-          execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./ccache.tar.xz)
-
-      - name: Generate ccache_vars for ccache based on machine
-        shell: cmake -P {0}
-        id: ccache_vars
-        run: |-
-          string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
-          message("::set-output name=timestamp::${current_date}")
-          message("::set-output name=hash::${{ env.ccache_compilercheck }}")
-
-      - name: Cache-op for build-cache through ccache
-        uses: actions/cache@v4
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1
         with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
-          restore-keys: |-
-            ccache-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            ccache-windows-x64
+          key: win-x64-${{ github.ref }}
+          restore-keys: win-x64-
 
-      - name: Cache-op for build-cache through vcpkg
+      - name: Cache vcpkg binaries
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
-          key: vcpkg-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
-          restore-keys: |-
-            vcpkg-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            vcpkg-windows-x64
+          key: vcpkg-windows-x64-${{ github.sha }}
+          restore-keys: vcpkg-windows-x64-
 
-      - name: ccache prolog
-        run: |-
-          cmake -E make_directory ${{github.workspace}}\vpkg
-          cmake -E make_directory ${{github.workspace}}\build
-
-      - name: Configure
-        working-directory: ${{github.workspace}}/build
+      - name: Configure & Build
         run: |
-          cmake .. -DBUILD_ARCH=corei7-avx -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON  -DVCPKG_TARGET_TRIPLET='x64-windows-static' `
-                -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"  `
-                -DCMAKE_CXX_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe `
-                -DCMAKE_C_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe
-        shell: powershell
-
-      - name: Build
-        working-directory: ${{github.workspace}}/build
-        run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
-        shell: powershell
-
-      - name: Install
-        working-directory: ${{github.workspace}}/build
-        run: cmake --install . --prefix "../libs/runtimes/win-x64/native" --component bergamot_translator_dynamic
-        shell: powershell
+          mkdir build
+          cd build
+          cmake .. -DBUILD_ARCH=corei7-avx -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DVCPKG_TARGET_TRIPLET="x64-windows-static" -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          cmake --build . --config Release -j3 --target bergamot_translator_dynamic
+          cmake --install . --prefix "../libs/runtimes/win-x64/native" --component bergamot_translator_dynamic
+        shell: bash
 
       - uses: actions/upload-artifact@v4
         with:
@@ -95,13 +53,6 @@ jobs:
     name: Build Windows ARM64 Native Lib
     continue-on-error: true
     env:
-      CCACHE_BASEDIR: "${{ github.workspace }}"
-      CCACHE_DIR: "${{ github.workspace }}\\ccache"
-      CCACHE_COMPILERCHECK: content
-      CCACHE_COMPRESS: "true"
-      CCACHE_COMPRESSLEVEL: 9
-      CCACHE_MAXSIZE: 200M
-      ccache_version: "4.5"
       VCPKG_DEFAULT_BINARY_CACHE: "${{ github.workspace }}\\vcpkg\\"
       VCPKG_TARGET_TRIPLET: arm64-windows-static
       VCPKG_HOST_TRIPLET: x64-windows
@@ -117,72 +68,38 @@ jobs:
           import json
           import os
           if os.path.exists('vcpkg.json'):
-              print("Lese vcpkg.json ein...")
               with open('vcpkg.json', 'r', encoding='utf-8') as f:
                   data = json.load(f)
               if 'dependencies' in data:
-                  # Filtert intel-mkl sauber heraus, egal ob String oder Object-Deklaration
                   data['dependencies'] = [
                       d for d in data['dependencies'] 
                       if (isinstance(d, str) and d != 'intel-mkl') or (isinstance(d, dict) and d.get('name') != 'intel-mkl')
                   ]
               with open('vcpkg.json', 'w', encoding='utf-8') as f:
                   json.dump(data, f, indent=2)
-              print("intel-mkl erfolgreich und strukturell sauber entfernt!")
+              print("vcpkg.json erfolgreich modifiziert!")
 
-      - name: Download ccache
-        shell: cmake -P {0}
-        run: |
-          set(ccache_url "https://github.com/cristianadam/ccache/releases/download/v${{ env.ccache_version }}/${{ runner.os }}.tar.xz")
-          file(DOWNLOAD "${ccache_url}" ./ccache.tar.xz SHOW_PROGRESS)
-          execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./ccache.tar.xz)
-
-      - name: Generate ccache_vars for ccache based on machine
-        shell: cmake -P {0}
-        id: ccache_vars
-        run: |-
-          string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
-          message("::set-output name=timestamp::${current_date}")
-          message("::set-output name=hash::${{ env.ccache_compilercheck }}")
-
-      - name: Cache-op for build-cache through ccache
-        uses: actions/cache@v4
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1
         with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-windows-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
-          restore-keys: |-
-            ccache-windows-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            ccache-windows-arm64
+          key: win-arm64-${{ github.ref }}
+          restore-keys: win-arm64-
 
-      - name: Cache-op for build-cache through vcpkg
+      - name: Cache vcpkg binaries
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
-          key: vcpkg-windows-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
-          restore-keys: |-
-            vcpkg-windows-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            vcpkg-windows-arm64
+          key: vcpkg-windows-arm64-${{ github.sha }}
+          restore-keys: vcpkg-windows-arm64-
 
-      - name: ccache prolog
-        run: |-
-          cmake -E make_directory ${{github.workspace}}\vpkg
-          cmake -E make_directory ${{github.workspace}}\build
-
-      - name: Configure
-        working-directory: ${{github.workspace}}/build
+      - name: Configure & Build
         run: |
-          cmake .. -G "Visual Studio 17 2022" -A ARM64 -Thost=x64 -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=OFF -DVCPKG_TARGET_TRIPLET="arm64-windows-static" -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" -DCMAKE_CXX_COMPILER_LAUNCHER="${{github.workspace}}\ccache.exe" -DCMAKE_C_COMPILER_LAUNCHER="${{github.workspace}}\ccache.exe"
-        shell: powershell
-
-      - name: Build
-        working-directory: ${{github.workspace}}/build
-        run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
-        shell: powershell
-
-      - name: Install
-        working-directory: ${{github.workspace}}/build
-        run: cmake --install . --prefix "../libs/runtimes/win-arm64/native" --component bergamot_translator_dynamic
-        shell: powershell
+          mkdir build
+          cd build
+          cmake .. -G "Visual Studio 17 2022" -A ARM64 -Thost=x64 -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=OFF -DVCPKG_TARGET_TRIPLET="arm64-windows-static" -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          cmake --build . --config Release -j3 --target bergamot_translator_dynamic
+          cmake --install . --prefix "../libs/runtimes/win-arm64/native" --component bergamot_translator_dynamic
+        shell: bash
 
       - uses: actions/upload-artifact@v4
         with:
@@ -193,66 +110,38 @@ jobs:
     runs-on: ubuntu-latest
     name: Build Linux x64 Native Lib
     continue-on-error: true
-    env:
-      ccache_basedir: ${{ github.workspace }}
-      ccache_dir: "${{ github.workspace }}/.ccache"
-      ccache_compilercheck: content
-      ccache_compress: 'true'
-      ccache_compresslevel: 9
-      ccache_maxsize: 200M
-      ccache_cmake: -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: linux-x64-${{ github.ref }}
+          restore-keys: linux-x64-
+
       - name: Install Dependencies
         run: |-
           sudo apt-get update
-          sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev ccache libunwind-dev libgoogle-perftools-dev
+          sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev libunwind-dev libgoogle-perftools-dev
+          
       - name: Install MKL
         run: |-
           wget -qO- "https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB" | sudo apt-key add -
           sudo sh -c "echo deb https://apt.repos.intel.com/mkl all main > /etc/apt/sources.list.d/intel-mkl.list"
           sudo apt-get update -o Dir::Etc::sourcelist="/etc/apt/sources.list.d/intel-mkl.list"
           sudo apt-get install -y --no-install-recommends intel-mkl-64bit-2020.0-088
-      - name: Generate ccache_vars for ccache based on machine
-        shell: bash
-        id: ccache_vars
+
+      - name: Configure & Build
         run: |-
-          echo "hash=$(echo ${{ env.ccache_compilercheck }})" >> $GITHUB_OUTPUT
-          echo "timestamp=$(date '+%Y-%m-%dT%H.%M.%S')" >> $GITHUB_OUTPUT
-      - name: Cache-op for build-cache through ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.ccache_dir }}
-          key: ccache-linux-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
-          restore-keys: |-
-            ccache-linux-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            ccache-linux-x64
-      - name: ccache environment setup
-        run: |-
-          echo "CCACHE_COMPILER_CHECK=${{ env.ccache_compilercheck }}" >> $GITHUB_ENV
-          echo "CCACHE_BASEDIR=${{ env.ccache_basedir }}" >> $GITHUB_ENV
-          echo "CCACHE_COMPRESS=${{ env.ccache_compress }}" >> $GITHUB_ENV
-          echo "CCACHE_COMPRESSLEVEL=${{ env.ccache_compresslevel }}" >> $GITHUB_ENV
-          echo "CCACHE_DIR=${{ env.ccache_dir }}" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=${{ env.ccache_maxsize }}" >> $GITHUB_ENV
-      - name: ccache prolog
-        run: |-
-          ccache -s
-          ccache -z
-      - name: cmake
-        run: |-
-          mkdir -p build
+          mkdir build
           cd build
-          cmake -L .. ${{ env.ccache_cmake }} -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON
-      - name: Build from source
-        working-directory: build
-        run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
-      - name: Install
-        working-directory: build
-        run: cmake --install . --prefix "../libs/runtimes/linux-x64/native" --component bergamot_translator_dynamic
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          cmake --build . --config Release -j3 --target bergamot_translator_dynamic
+          cmake --install . --prefix "../libs/runtimes/linux-x64/native" --component bergamot_translator_dynamic
+
       - uses: actions/upload-artifact@v4
         with:
           name: libs-linux-x64
@@ -262,41 +151,35 @@ jobs:
     runs-on: ubuntu-latest
     name: Build Linux ARM64 Native Lib
     continue-on-error: true
-    env:
-      ccache_basedir: ${{ github.workspace }}
-      ccache_dir: "${{ github.workspace }}/.ccache"
-      ccache_compilercheck: content
-      ccache_compress: 'true'
-      ccache_compresslevel: 9
-      ccache_maxsize: 200M
-      ccache_cmake: -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
           
-      - name: Setup Multi-Arch APT Repositories (Sanitized)
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: linux-arm64-${{ github.ref }}
+          restore-keys: linux-arm64-
+          
+      - name: Setup Multi-Arch APT Repositories
         run: |
-          # 1. ARM64 Architektur registrieren
           sudo dpkg --add-architecture arm64
           
-          # 2. Drittanbieter-Repositories wegsichern, um Fehler 100 zu vermeiden
+          # Unnötige Drittanbieter-Quellen wegsichern, um 404/Exit-100 zu verhindern
           sudo mkdir -p /etc/apt/sources.list.d.bak
           sudo mv /etc/apt/sources.list.d/* /etc/apt/sources.list.d.bak/ || true
 
-          # 3. Saubere Standard-Ubuntu-Quellen für amd64 anlegen
+          # Saubere Zuweisung: Standard-Ubuntu für amd64, Ports für arm64
           sudo tee /etc/apt/sources.list.d/ubuntu.sources <<EOF
           Types: deb
-          URIs: http://archive.ubuntu.com/ubuntu/ http://security.ubuntu.com/ubuntu/
+          URIs: http://azure.archive.ubuntu.com/ubuntu/ http://security.ubuntu.com/ubuntu/
           Suites: noble noble-updates noble-security noble-backports
           Components: main restricted universe multiverse
           Architectures: amd64 i386
           Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-          EOF
 
-          # 4. Saubere Ubuntu-Quellen für arm64 (ports) anlegen
-          sudo tee /etc/apt/sources.list.d/arm64-ports.sources <<EOF
           Types: deb
           URIs: http://ports.ubuntu.com/ubuntu-ports/
           Suites: noble noble-updates noble-security noble-backports
@@ -305,50 +188,21 @@ jobs:
           Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
           EOF
 
-          sudo apt-get update
+          # Fehler hier gezielt ignorieren, falls GitHub-interne Repos streiken
+          sudo apt-get update || true
 
       - name: Install Cross-Compile Dependencies
         run: |
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu ccache \
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
                                  protobuf-compiler libprotobuf-dev:arm64 \
                                  libboost-all-dev:arm64 libunwind-dev:arm64 \
                                  libgoogle-perftools-dev:arm64 libopenblas-dev:arm64
-
-      - name: Generate ccache_vars
-        shell: bash
-        id: ccache_vars
-        run: |-
-          echo "hash=$(echo ${{ env.ccache_compilercheck }})" >> $GITHUB_OUTPUT
-          echo "timestamp=$(date '+%Y-%m-%dT%H.%M.%S')" >> $GITHUB_OUTPUT
           
-      - name: Cache-op for build-cache through ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.ccache_dir }}
-          key: ccache-linux-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
-          restore-keys: |-
-            ccache-linux-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            ccache-linux-arm64
-            
-      - name: ccache environment setup
+      - name: Configure & Build
         run: |-
-          echo "CCACHE_COMPILER_CHECK=${{ env.ccache_compilercheck }}" >> $GITHUB_ENV
-          echo "CCACHE_BASEDIR=${{ env.ccache_basedir }}" >> $GITHUB_ENV
-          echo "CCACHE_COMPRESS=${{ env.ccache_compress }}" >> $GITHUB_ENV
-          echo "CCACHE_COMPRESSLEVEL=${{ env.ccache_compresslevel }}" >> $GITHUB_ENV
-          echo "CCACHE_DIR=${{ env.ccache_dir }}" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=${{ env.ccache_maxsize }}" >> $GITHUB_ENV
-          
-      - name: ccache prolog
-        run: |-
-          ccache -s
-          ccache -z
-          
-      - name: cmake
-        run: |-
-          mkdir -p build
+          mkdir build
           cd build
-          cmake -L .. ${{ env.ccache_cmake }} \
+          cmake .. \
             -DCMAKE_SYSTEM_NAME=Linux \
             -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
             -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
@@ -356,15 +210,11 @@ jobs:
             -DProtobuf_PROTOC_EXECUTABLE=/usr/bin/protoc \
             -DCMAKE_BUILD_TYPE=Release \
             -DUSE_MKL=OFF \
-            -DUSE_STATIC_LIBS=ON
-            
-      - name: Build from source
-        working-directory: build
-        run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
-          
-      - name: Install
-        working-directory: build
-        run: cmake --install . --prefix "../libs/runtimes/linux-arm64/native" --component bergamot_translator_dynamic
+            -DUSE_STATIC_LIBS=ON \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          cmake --build . --config Release -j3 --target bergamot_translator_dynamic
+          cmake --install . --prefix "../libs/runtimes/linux-arm64/native" --component bergamot_translator_dynamic
           
       - uses: actions/upload-artifact@v4
         with:
