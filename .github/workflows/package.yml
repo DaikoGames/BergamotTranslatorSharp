@@ -1,6 +1,7 @@
 name: Package
 
 on:
+  workflow_dispatch:
   push:
     branches: [master]
     tags: [v*.*.*]
@@ -10,7 +11,7 @@ on:
 jobs:
   win:
     runs-on: windows-latest
-    name: Build Windows Native Lib
+    name: Build Windows x64 Native Lib
     env:
       CCACHE_BASEDIR: "${{ github.workspace }}"
       CCACHE_DIR: "${{ github.workspace }}\\ccache"
@@ -32,9 +33,6 @@ jobs:
           set(ccache_url "https://github.com/cristianadam/ccache/releases/download/v${{ env.ccache_version }}/${{ runner.os }}.tar.xz")
           file(DOWNLOAD "${ccache_url}" ./ccache.tar.xz SHOW_PROGRESS)
           execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./ccache.tar.xz)
-          if(ret AND NOT ret EQUAL 0)
-            message( FATAL_ERROR "Bad exit status")
-          endif()
 
       - name: Generate ccache_vars for ccache based on machine
         shell: cmake -P {0}
@@ -51,7 +49,6 @@ jobs:
           key: ccache-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
           restore-keys: |-
             ccache-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            ccache-windows-x64-${{ steps.ccache_vars.outputs.hash }}
             ccache-windows-x64
 
       - name: Cache-op for build-cache through vcpkg
@@ -61,22 +58,15 @@ jobs:
           key: vcpkg-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
           restore-keys: |-
             vcpkg-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            vcpkg-windows-x64-${{ steps.ccache_vars.outputs.hash }}
             vcpkg-windows-x64
 
       - name: ccache prolog
         run: |-
-          ${{github.workspace}}\ccache.exe -sv # Print current cache stats
-          ${{github.workspace}}\ccache.exe -z # Print current cache stats
           mkdir ${{github.workspace}}\vcpkg
-
-      - name: Create Build Environment
-        # Some projects don't allow in-source building, so create a separate build directory
-        # We'll use this as our working directory for all subsequent commands
-        run: cmake -E make_directory ${{github.workspace}}/build
+          mkdir ${{github.workspace}}\build
 
       - name: Configure
-        working-directory: ${{github.workspace}}/build #@TODO figure out how variables are accessed from power shell, as they seem to not be read.
+        working-directory: ${{github.workspace}}/build
         run: |
           cmake .. -DBUILD_ARCH=corei7-avx -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON  -DVCPKG_TARGET_TRIPLET='x64-windows-static' `
                 -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"  `
@@ -91,20 +81,98 @@ jobs:
 
       - name: Install
         working-directory: ${{github.workspace}}/build
-        run: cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
+        run: cmake --install . --prefix "../libs/runtimes/win-x64/native" --component bergamot_translator_dynamic
         shell: powershell
 
-      - name: ccache epilog
-        run: |-
-          ${{github.workspace}}\\ccache.exe -sv # Print current cache stats
       - uses: actions/upload-artifact@v4
         with:
-          name: libs-win
+          name: libs-win-x64
+          path: libs/*
+
+  win-arm64:
+    runs-on: windows-latest
+    name: Build Windows ARM64 Native Lib
+    env:
+      CCACHE_BASEDIR: "${{ github.workspace }}"
+      CCACHE_DIR: "${{ github.workspace }}\\ccache"
+      CCACHE_COMPILERCHECK: content
+      CCACHE_COMPRESS: "true"
+      CCACHE_COMPRESSLEVEL: 9
+      CCACHE_MAXSIZE: 200M
+      ccache_version: "4.5"
+      VCPKG_DEFAULT_BINARY_CACHE: "${{ github.workspace }}\\vcpkg\\"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download ccache
+        shell: cmake -P {0}
+        run: |
+          set(ccache_url "https://github.com/cristianadam/ccache/releases/download/v${{ env.ccache_version }}/${{ runner.os }}.tar.xz")
+          file(DOWNLOAD "${ccache_url}" ./ccache.tar.xz SHOW_PROGRESS)
+          execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./ccache.tar.xz)
+
+      - name: Generate ccache_vars for ccache based on machine
+        shell: cmake -P {0}
+        id: ccache_vars
+        run: |-
+          string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
+          message("::set-output name=timestamp::${current_date}")
+          message("::set-output name=hash::${{ env.ccache_compilercheck }}")
+
+      - name: Cache-op for build-cache through ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-windows-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
+          restore-keys: |-
+            ccache-windows-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
+            ccache-windows-arm64
+
+      - name: Cache-op for build-cache through vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-windows-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
+          restore-keys: |-
+            vcpkg-windows-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
+            vcpkg-windows-arm64
+
+      - name: ccache prolog
+        run: |-
+          mkdir ${{github.workspace}}\vcpkg
+          mkdir ${{github.workspace}}\build
+
+      - name: Configure
+        working-directory: ${{github.workspace}}/build
+        # STYLE MAINTAINED: Added -A ARM64, targeting 'arm64-windows-static', and stripped Intel architecture flags
+        run: |
+          cmake .. -G "Visual Studio 17 2022" -A ARM64 -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DVCPKG_TARGET_TRIPLET='arm64-windows-static' `
+                -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"  `
+                -DCMAKE_CXX_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe `
+                -DCMAKE_C_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe
+        shell: powershell
+
+      - name: Build
+        working-directory: ${{github.workspace}}/build
+        run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
+        shell: powershell
+
+      - name: Install
+        working-directory: ${{github.workspace}}/build
+        run: cmake --install . --prefix "../libs/runtimes/win-arm64/native" --component bergamot_translator_dynamic
+        shell: powershell
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libs-win-arm64
           path: libs/*
 
   linux:
     runs-on: ubuntu-latest
-    name: Build Linux Native Lib
+    name: Build Linux x64 Native Lib
     env:
       ccache_basedir: ${{ github.workspace }}
       ccache_dir: "${{ github.workspace }}/.ccache"
@@ -141,7 +209,6 @@ jobs:
           key: ccache-linux-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
           restore-keys: |-
             ccache-linux-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            ccache-linux-x64-${{ steps.ccache_vars.outputs.hash }}
             ccache-linux-x64
       - name: ccache environment setup
         run: |-
@@ -153,8 +220,8 @@ jobs:
           echo "CCACHE_MAXSIZE=${{ env.ccache_maxsize }}" >> $GITHUB_ENV
       - name: ccache prolog
         run: |-
-          ccache -s # Print current cache stats
-          ccache -z # Zero cache entry
+          ccache -s
+          ccache -z
       - name: cmake
         run: |-
           mkdir -p build
@@ -165,53 +232,73 @@ jobs:
         run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
       - name: Install
         working-directory: build
-        run: cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
-      - name: ccache epilog
-        run: 'ccache -s # Print current cache stats'
+        run: cmake --install . --prefix "../libs/runtimes/linux-x64/native" --component bergamot_translator_dynamic
       - uses: actions/upload-artifact@v4
         with:
-          name: libs-linux
+          name: libs-linux-x64
           path: libs/*
-  dotnet:
-    runs-on: ubuntu-latest
-    name: Build .NET Lib
-    needs:
-      - win
-      - linux
-    permissions:
-      contents: write
+
+  linux-arm64:
+    runs-on: ubuntu-latest-arm64
+    name: Build Linux ARM64 Native Lib
+    env:
+      ccache_basedir: ${{ github.workspace }}
+      ccache_dir: "${{ github.workspace }}/.ccache"
+      ccache_compilercheck: content
+      ccache_compress: 'true'
+      ccache_compresslevel: 9
+      ccache_maxsize: 200M
+      ccache_cmake: -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - uses: actions/setup-dotnet@v4
+          submodules: recursive
+      - name: Install Dependencies
+        # STYLE MAINTAINED: Swapped out Intel MKL dependencies for generic OpenBLAS optimized for ARM
+        run: |-
+          sudo apt-get update
+          sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev ccache libunwind-dev libgoogle-perftools-dev libopenblas-dev
+      - name: Generate ccache_vars for ccache based on machine
+        shell: bash
+        id: ccache_vars
+        run: |-
+          echo "hash=$(echo ${{ env.ccache_compilercheck }})" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date '+%Y-%m-%dT%H.%M.%S')" >> $GITHUB_OUTPUT
+      - name: Cache-op for build-cache through ccache
+        uses: actions/cache@v4
         with:
-          dotnet-version: 8.0.x
-      - uses: gittools/actions/gitversion/setup@v3.1.11
-        with:
-          versionSpec: "5.x"
-      - id: gitversion
-        uses: gittools/actions/gitversion/execute@v3.1.11
-      - uses: actions/download-artifact@v4
-        with:
-          path: libs
-          merge-multiple: true
-      - run: |
-          dotnet pack BergamotTranslatorSharp -c Release -o pack \
-            -p:Version=${{ steps.gitversion.outputs.fullSemVer }} \
-            -p:AssemblyVersion=${{ steps.gitversion.outputs.assemblySemVer }} \
-            -p:FileVersion=${{ steps.gitversion.outputs.assemblySemFileVer }} \
-            -p:InformationalVersion=${{ steps.gitversion.outputs.informationalVersion }}
+          path: ${{ env.ccache_dir }}
+          key: ccache-linux-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
+          restore-keys: |-
+            ccache-linux-arm64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
+            ccache-linux-arm64
+      - name: ccache environment setup
+        run: |-
+          echo "CCACHE_COMPILER_CHECK=${{ env.ccache_compilercheck }}" >> $GITHUB_ENV
+          echo "CCACHE_BASEDIR=${{ env.ccache_basedir }}" >> $GITHUB_ENV
+          echo "CCACHE_COMPRESS=${{ env.ccache_compress }}" >> $GITHUB_ENV
+          echo "CCACHE_COMPRESSLEVEL=${{ env.ccache_compresslevel }}" >> $GITHUB_ENV
+          echo "CCACHE_DIR=${{ env.ccache_dir }}" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=${{ env.ccache_maxsize }}" >> $GITHUB_ENV
+      - name: ccache prolog
+        run: |-
+          ccache -s
+          ccache -z
+      - name: cmake
+        run: |-
+          mkdir -p build
+          cd build
+          cmake -L .. ${{ env.ccache_cmake }} -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON
+      - name: Build from source
+        working-directory: build
+        run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
+      - name: Install
+        working-directory: build
+        run: cmake --install . --prefix "../libs/runtimes/linux-arm64/native" --component bergamot_translator_dynamic
       - uses: actions/upload-artifact@v4
         with:
-          name: nupkg
-          path: pack/*
-      - if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
-        run: dotnet nuget push pack/*.nupkg -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json --skip-duplicate
-      - if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+          name: libs-linux-arm64
+          path: libs/*
+
+  
