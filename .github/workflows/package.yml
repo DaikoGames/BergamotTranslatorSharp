@@ -5,7 +5,7 @@ on:
 
 jobs:
   # ----------------------------------------------------
-  # WINDOWS X64
+  # WINDOWS X64 (Restored to your working setup)
   # ----------------------------------------------------
   win-x64:
     runs-on: windows-latest
@@ -30,6 +30,7 @@ jobs:
             -DBUILD_ARCH=corei7-avx `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
             -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
@@ -42,7 +43,7 @@ jobs:
           path: libs/*
 
   # ----------------------------------------------------
-  # WINDOWS ARM64
+  # WINDOWS ARM64 (Isolated & Fixed)
   # ----------------------------------------------------
   win-arm64:
     runs-on: windows-latest
@@ -140,7 +141,7 @@ jobs:
           path: libs/*
 
   # ----------------------------------------------------
-  # MACOS ARM64 (RESTORED TO ORIGINAL)
+  # MACOS ARM64 (Original)
   # ----------------------------------------------------
   macos-arm64:
     runs-on: macos-latest
