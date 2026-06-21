@@ -25,23 +25,16 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Download ccache
-        shell: cmake -P {0}
-        run: |
-          set(ccache_url "https://github.com/cristianadam/ccache/releases/download/v${{ env.ccache_version }}/${{ runner.os }}.tar.xz")
-          file(DOWNLOAD "${ccache_url}" ./ccache.tar.xz SHOW_PROGRESS)
-          execute_process(COMMAND ${CMAKE_COMMAND} -E tar xvf ./ccache.tar.xz)
-          if(ret AND NOT ret EQUAL 0)
-            message( FATAL_ERROR "Bad exit status")
-          endif()
+      - name: Install ccache
+        run: choco install ccache --version=${{ env.ccache_version }} -y
 
       - name: Generate ccache_vars for ccache based on machine
         shell: cmake -P {0}
         id: ccache_vars
         run: |-
-          string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
-          message("::set-output name=timestamp::${current_date}")
-          message("::set-output name=hash::${{ env.ccache_compilercheck }}")
+          string(TIMESTAMP current_date "%Y-%m-%d-%H_%M_%S" UTC)
+          file(APPEND "$ENV{GITHUB_OUTPUT}" "timestamp=${current_date}\n")
+          file(APPEND "$ENV{GITHUB_OUTPUT}" "hash=${{ env.CCACHE_COMPILERCHECK }}\n")
 
       - name: Cache-op for build-cache through ccache
         uses: actions/cache@v4
@@ -65,38 +58,39 @@ jobs:
 
       - name: ccache prolog
         run: |-
-          ${{github.workspace}}\ccache.exe -sv
-          ${{github.workspace}}\ccache.exe -z
-          mkdir ${{github.workspace}}\vcpkg
+          ccache -sv
+          ccache -z
+          mkdir "${{ github.workspace }}\vcpkg"
 
       - name: Create Build Environment
-        run: cmake -E make_directory ${{github.workspace}}/build
+        run: cmake -E make_directory "${{ github.workspace }}/build"
 
       - name: Configure
-        working-directory: ${{github.workspace}}/build
+        working-directory: ${{ github.workspace }}/build
         run: |
           $target_triplet = if ("${{ matrix.arch }}" -eq "arm64") { "arm64-windows-static" } else { "x64-windows-static" }
           $build_arch = if ("${{ matrix.arch }}" -eq "arm64") { "arm64" } else { "corei7-avx" }
           
           cmake .. -A ${{ matrix.arch }} -DBUILD_ARCH=$build_arch -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' -DVCPKG_TARGET_TRIPLET=$target_triplet `
                 -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"  `
-                -DCMAKE_CXX_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe `
-                -DCMAKE_C_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache `
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache
         shell: powershell
 
       - name: Build
-        working-directory: ${{github.workspace}}/build
+        working-directory: ${{ github.workspace }}/build
         run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
         shell: powershell
 
       - name: Install
-        working-directory: ${{github.workspace}}/build
+        working-directory: ${{ github.workspace }}/build
         run: cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
         shell: powershell
 
       - name: ccache epilog
         run: |-
-          ${{github.workspace}}\\ccache.exe -sv
+          ccache -sv
+          
       - uses: actions/upload-artifact@v4
         with:
           name: libs-win-${{ matrix.arch }}
@@ -106,7 +100,6 @@ jobs:
     strategy:
       matrix:
         arch: [x64, arm64]
-    # Benutzt ubuntu-latest für x64, und ubuntu-24.04-arm64 für native ARM-Builds (falls in GitHub verfügbar)
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
     name: Build Linux Native Lib (${{ matrix.arch }})
     env:
@@ -164,7 +157,6 @@ jobs:
         run: |-
           mkdir -p build
           cd build
-          # MKL deaktivieren, falls arm64 gebaut wird, da Intel MKL dort nicht läuft
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             cmake -L .. ${{ env.ccache_cmake }} -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=OFF
           else
