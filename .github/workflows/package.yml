@@ -19,8 +19,8 @@ jobs:
       - name: Install Dependencies via vcpkg
         shell: powershell
         run: |
-          # Installiert die für Bergamot zwingend benötigten Pakete für Windows x64
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet x64-windows-static
+          # --classic erzwingt die Installation trotz vorhandener vcpkg.json
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet x64-windows-static --classic
 
       - name: Configure & Build
         shell: powershell
@@ -58,8 +58,8 @@ jobs:
       - name: Install Dependencies via vcpkg
         shell: powershell
         run: |
-          # Installiert die Pakete für den Windows ARM64 Cross-Build
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet arm64-windows-static
+          # --classic erzwingt die Installation trotz vorhandener vcpkg.json
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet arm64-windows-static --classic
 
       - name: Configure & Build
         shell: powershell
