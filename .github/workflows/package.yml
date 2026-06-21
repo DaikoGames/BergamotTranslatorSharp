@@ -59,7 +59,8 @@ jobs:
         shell: powershell
         run: |
           # --classic erzwingt die Installation trotz vorhandener vcpkg.json
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet arm64-windows-static --classic
+          # gperftools wurde entfernt, da es arm64-windows nicht unterstützt
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options --triplet arm64-windows-static --classic
 
       - name: Configure & Build
         shell: powershell
