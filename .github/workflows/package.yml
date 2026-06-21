@@ -1,11 +1,7 @@
 name: Package
 
 on:
-  push:
-    branches: [master]
-    tags: [v*.*.*]
-  pull_request:
-    branches: ["**"]
+  workflow_dispatch:
 
 jobs:
   win:
