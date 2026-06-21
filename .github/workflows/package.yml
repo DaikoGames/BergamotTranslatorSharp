@@ -10,7 +10,10 @@ on:
 jobs:
   win:
     runs-on: windows-latest
-    name: Build Windows Native Lib
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    name: Build Windows Native Lib (${{ matrix.arch }})
     env:
       CCACHE_BASEDIR: "${{ github.workspace }}"
       CCACHE_DIR: "${{ github.workspace }}\\ccache"
@@ -48,37 +51,38 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
+          key: ccache-windows-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
           restore-keys: |-
-            ccache-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            ccache-windows-x64-${{ steps.ccache_vars.outputs.hash }}
-            ccache-windows-x64
+            ccache-windows-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
+            ccache-windows-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}
+            ccache-windows-${{ matrix.arch }}
 
       - name: Cache-op for build-cache through vcpkg
         uses: actions/cache@v4
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
-          key: vcpkg-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
+          key: vcpkg-windows-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
           restore-keys: |-
-            vcpkg-windows-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            vcpkg-windows-x64-${{ steps.ccache_vars.outputs.hash }}
-            vcpkg-windows-x64
+            vcpkg-windows-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
+            vcpkg-windows-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}
+            vcpkg-windows-${{ matrix.arch }}
 
       - name: ccache prolog
         run: |-
-          ${{github.workspace}}\ccache.exe -sv # Print current cache stats
-          ${{github.workspace}}\ccache.exe -z # Print current cache stats
+          ${{github.workspace}}\ccache.exe -sv
+          ${{github.workspace}}\ccache.exe -z
           mkdir ${{github.workspace}}\vcpkg
 
       - name: Create Build Environment
-        # Some projects don't allow in-source building, so create a separate build directory
-        # We'll use this as our working directory for all subsequent commands
         run: cmake -E make_directory ${{github.workspace}}/build
 
       - name: Configure
-        working-directory: ${{github.workspace}}/build #@TODO figure out how variables are accessed from power shell, as they seem to not be read.
+        working-directory: ${{github.workspace}}/build
         run: |
-          cmake .. -DBUILD_ARCH=corei7-avx -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' -DVCPKG_TARGET_TRIPLET='x64-windows-static' `
+          $target_triplet = if ("${{ matrix.arch }}" -eq "arm64") { "arm64-windows-static" } else { "x64-windows-static" }
+          $build_arch = if ("${{ matrix.arch }}" -eq "arm64") { "arm64" } else { "corei7-avx" }
+          
+          cmake .. -A ${{ matrix.arch }} -DBUILD_ARCH=$build_arch -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' -DVCPKG_TARGET_TRIPLET=$target_triplet `
                 -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"  `
                 -DCMAKE_CXX_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe `
                 -DCMAKE_C_COMPILER_LAUNCHER=${{github.workspace}}\ccache.exe
@@ -96,15 +100,19 @@ jobs:
 
       - name: ccache epilog
         run: |-
-          ${{github.workspace}}\\ccache.exe -sv # Print current cache stats
+          ${{github.workspace}}\\ccache.exe -sv
       - uses: actions/upload-artifact@v4
         with:
-          name: libs-win
+          name: libs-win-${{ matrix.arch }}
           path: libs/*
 
   linux:
-    runs-on: ubuntu-latest
-    name: Build Linux Native Lib
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    # Benutzt ubuntu-latest für x64, und ubuntu-24.04-arm64 für native ARM-Builds (falls in GitHub verfügbar)
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
+    name: Build Linux Native Lib (${{ matrix.arch }})
     env:
       ccache_basedir: ${{ github.workspace }}
       ccache_dir: "${{ github.workspace }}/.ccache"
@@ -122,7 +130,8 @@ jobs:
         run: |-
           sudo apt-get update
           sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev ccache libunwind-dev libgoogle-perftools-dev
-      - name: Install MKL
+      - name: Install MKL (x64 Only)
+        if: matrix.arch == 'x64'
         run: |-
           wget -qO- "https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB" | sudo apt-key add -
           sudo sh -c "echo deb https://apt.repos.intel.com/mkl all main > /etc/apt/sources.list.d/intel-mkl.list"
@@ -138,11 +147,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.ccache_dir }}
-          key: ccache-linux-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
+          key: ccache-linux-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}-${{ steps.ccache_vars.outputs.timestamp }}
           restore-keys: |-
-            ccache-linux-x64-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
-            ccache-linux-x64-${{ steps.ccache_vars.outputs.hash }}
-            ccache-linux-x64
+            ccache-linux-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
+            ccache-linux-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}
+            ccache-linux-${{ matrix.arch }}
       - name: ccache environment setup
         run: |-
           echo "CCACHE_COMPILER_CHECK=${{ env.ccache_compilercheck }}" >> $GITHUB_ENV
@@ -153,13 +162,18 @@ jobs:
           echo "CCACHE_MAXSIZE=${{ env.ccache_maxsize }}" >> $GITHUB_ENV
       - name: ccache prolog
         run: |-
-          ccache -s # Print current cache stats
-          ccache -z # Zero cache entry
+          ccache -s
+          ccache -z
       - name: cmake
         run: |-
           mkdir -p build
           cd build
-          cmake -L .. ${{ env.ccache_cmake }} -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON
+          # MKL deaktivieren, falls arm64 gebaut wird, da Intel MKL dort nicht läuft
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            cmake -L .. ${{ env.ccache_cmake }} -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=OFF
+          else
+            cmake -L .. ${{ env.ccache_cmake }} -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON
+          fi
       - name: Build from source
         working-directory: build
         run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
@@ -167,15 +181,15 @@ jobs:
         working-directory: build
         run: cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
       - name: ccache epilog
-        run: 'ccache -s # Print current cache stats'
+        run: 'ccache -s'
       - uses: actions/upload-artifact@v4
         with:
-          name: libs-linux
+          name: libs-linux-${{ matrix.arch }}
           path: libs/*
 
   macos:
     runs-on: macos-latest
-    name: Build macOS Native Lib
+    name: Build macOS Native Lib (arm64)
     env:
       ccache_basedir: ${{ github.workspace }}
       ccache_dir: "${{ github.workspace }}/.ccache"
@@ -217,8 +231,8 @@ jobs:
           echo "CCACHE_MAXSIZE=${{ env.ccache_maxsize }}" >> $GITHUB_ENV
       - name: ccache prolog
         run: |-
-          ccache -s # Print current cache stats
-          ccache -z # Zero cache entry
+          ccache -s
+          ccache -z
       - name: cmake
         run: |-
           LLVM_PREFIX="$(brew --prefix llvm@18)"
@@ -240,11 +254,12 @@ jobs:
         working-directory: build
         run: cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
       - name: ccache epilog
-        run: 'ccache -s # Print current cache stats'
+        run: 'ccache -s'
       - uses: actions/upload-artifact@v4
         with:
           name: libs-macos-arm64
           path: libs/*
+
   dotnet:
     runs-on: ubuntu-latest
     name: Build .NET Lib
