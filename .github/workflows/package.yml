@@ -56,7 +56,6 @@ jobs:
       - name: Install Dependencies via vcpkg
         shell: powershell
         run: |
-          # Installiert die Core-Abhängigkeiten exklusiv für ARM64 aus den Sourcen
           & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options --triplet arm64-windows-static --classic
 
       - name: Configure & Build
@@ -64,7 +63,6 @@ jobs:
         run: |
           mkdir build
           cd build
-          # -DVCPKG_MANIFEST_MODE=OFF verhindert, dass vcpkg versucht die inkompatible vcpkg.json zu laden
           cmake .. -A ARM64 `
             -DBUILD_ARCH=arm64 `
             -DCMAKE_BUILD_TYPE=Release `
@@ -142,7 +140,7 @@ jobs:
           path: libs/*
 
   # ----------------------------------------------------
-  # MACOS ARM64
+  # MACOS ARM64 (RESTORED TO ORIGINAL)
   # ----------------------------------------------------
   macos-arm64:
     runs-on: macos-latest
@@ -167,6 +165,7 @@ jobs:
             -DGPERFTOOLS_ROOT="$GPERFTOOLS_PREFIX" \
             -DCMAKE_BUILD_TYPE=Release \
             -DUSE_STATIC_LIBS=ON \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DGIT_SUBMODULE=OFF
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
           cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
