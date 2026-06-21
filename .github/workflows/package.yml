@@ -10,34 +10,40 @@ jobs:
   win-x64:
     runs-on: windows-latest
     name: Build Windows Native Lib (x64)
-    env:
-      VCPKG_DEFAULT_TRIPLET: x64-windows-static
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # Nutzt die offizielle Microsoft-Action für perfektes vcpkg-Caching und Setup
-      - name: Setup vcpkg
+      # Nutzt Microsofts vcpkg-Action zur fehlerfreien Installation im Manifest-Modus vorab
+      - name: Run vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: ${{ env.VCPKG_INSTALLATION_ROOT }}
+          vcpkgJsonGlob: '**/vcpkg.json'
 
-      - name: Configure & Build
+      # Führt das Configure & Build getrennt in einer optimierten MSVC-Umgebung aus
+      - name: Run CMake
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: 'x64-windows-static' # Falls in CMakePresets definiert, ansonsten Fallback:
+          configurePresetAdditionalArgs: |
+            -A x64
+            -DBUILD_ARCH=corei7-avx
+            -DCMAKE_BUILD_TYPE=Release
+            -DUSE_STATIC_LIBS=ON
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static
+            -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_INSTALLATION_ROOT }}/scripts/buildsystems/vcpkg.cmake"
+          buildPreset: 'Release'
+          buildPresetAdditionalArgs: '--target bergamot_translator_dynamic -j 3'
+
+      # Extrahiert das Artefakt manuell aus dem generierten Build-Ordner
+      - name: Install Artifacts
         shell: powershell
         run: |
-          mkdir build
           cd build
-          cmake .. -A x64 `
-            -DBUILD_ARCH=corei7-avx `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DUSE_STATIC_LIBS=ON `
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
-          
-          cmake --build . --config Release -j3 --target bergamot_translator_dynamic
           cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
 
       - uses: actions/upload-artifact@v4
@@ -52,17 +58,22 @@ jobs:
     runs-on: windows-latest
     name: Build Windows Native Lib (arm64)
     env:
-      VCPKG_DEFAULT_TRIPLET: arm64-windows-static
+      VCPKG_TARGET_TRIPLET: arm64-windows-static
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
+      - name: Setup vcpkg Cache
+        uses: actions/cache@v4
         with:
-          vcpkgDirectory: ${{ env.VCPKG_INSTALLATION_ROOT }}
+          path: |
+            ${{ env.USERPROFILE }}\AppData\Local\vcpkg\archives
+            ${{ github.workspace }}/build/vcpkg_installed
+          key: vcpkg-win-arm64-${{ hashFiles('vcpkg.json', '**/CMakeLists.txt') }}
+          restore-keys: |
+            vcpkg-win-arm64-
 
       - name: Configure & Build
         shell: powershell
