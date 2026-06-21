@@ -100,7 +100,7 @@ jobs:
     strategy:
       matrix:
         arch: [x64, arm64]
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     name: Build Linux Native Lib (${{ matrix.arch }})
     env:
       ccache_basedir: ${{ github.workspace }}
@@ -115,10 +115,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          
       - name: Install Dependencies
         run: |-
           sudo apt-get update
-          sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev ccache libunwind-dev libgoogle-perftools-dev
+          sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev ccache libunwind-dev gperftools libgoogle-perftools-dev || sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev ccache libunwind-dev
+          
       - name: Install MKL (x64 Only)
         if: matrix.arch == 'x64'
         run: |-
@@ -126,12 +128,14 @@ jobs:
           sudo sh -c "echo deb https://apt.repos.intel.com/mkl all main > /etc/apt/sources.list.d/intel-mkl.list"
           sudo apt-get update -o Dir::Etc::sourcelist="/etc/apt/sources.list.d/intel-mkl.list"
           sudo apt-get install -y --no-install-recommends intel-mkl-64bit-2020.0-088
+          
       - name: Generate ccache_vars for ccache based on machine
         shell: bash
         id: ccache_vars
         run: |-
           echo "hash=$(echo ${{ env.ccache_compilercheck }})" >> $GITHUB_OUTPUT
           echo "timestamp=$(date '+%Y-%m-%dT%H.%M.%S')" >> $GITHUB_OUTPUT
+          
       - name: Cache-op for build-cache through ccache
         uses: actions/cache@v4
         with:
@@ -141,6 +145,7 @@ jobs:
             ccache-linux-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}-${{ github.ref }}
             ccache-linux-${{ matrix.arch }}-${{ steps.ccache_vars.outputs.hash }}
             ccache-linux-${{ matrix.arch }}
+            
       - name: ccache environment setup
         run: |-
           echo "CCACHE_COMPILER_CHECK=${{ env.ccache_compilercheck }}" >> $GITHUB_ENV
@@ -149,10 +154,12 @@ jobs:
           echo "CCACHE_COMPRESSLEVEL=${{ env.ccache_compresslevel }}" >> $GITHUB_ENV
           echo "CCACHE_DIR=${{ env.ccache_dir }}" >> $GITHUB_ENV
           echo "CCACHE_MAXSIZE=${{ env.ccache_maxsize }}" >> $GITHUB_ENV
+          
       - name: ccache prolog
         run: |-
           ccache -s
           ccache -z
+          
       - name: cmake
         run: |-
           mkdir -p build
@@ -162,14 +169,18 @@ jobs:
           else
             cmake -L .. ${{ env.ccache_cmake }} -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON
           fi
+          
       - name: Build from source
         working-directory: build
         run: cmake --build . --config Release -j3 --target bergamot_translator_dynamic
+        
       - name: Install
         working-directory: build
         run: cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
+        
       - name: ccache epilog
         run: 'ccache -s'
+        
       - uses: actions/upload-artifact@v4
         with:
           name: libs-linux-${{ matrix.arch }}
