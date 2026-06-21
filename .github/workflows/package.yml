@@ -10,24 +10,28 @@ jobs:
   win-x64:
     runs-on: windows-latest
     name: Build Windows Native Lib (x64)
-    env:
-      VCPKG_DEFAULT_BINARY_CACHE: "${{ github.workspace }}\\vcpkg\\"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Create Build Environment
-        run: cmake -E make_directory "${{ github.workspace }}/build"
-
       - name: Configure & Build
-        working-directory: ${{ github.workspace }}/build
+        shell: powershell
         run: |
-          cmake .. -A x64 -DBUILD_ARCH=corei7-avx -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          mkdir build
+          cd build
+          # Nutzt die korrekte GitHub-Variable für vcpkg
+          cmake .. -A x64 `
+            -DBUILD_ARCH=corei7-avx `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DUSE_STATIC_LIBS=ON `
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
           cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
-        shell: powershell
 
       - uses: actions/upload-artifact@v4
         with:
@@ -35,29 +39,33 @@ jobs:
           path: libs/*
 
   # ----------------------------------------------------
-  # WINDOWS ARM64 (Cross-Compilation via MSVC)
+  # WINDOWS ARM64
   # ----------------------------------------------------
   win-arm64:
     runs-on: windows-latest
     name: Build Windows Native Lib (arm64)
-    env:
-      VCPKG_DEFAULT_BINARY_CACHE: "${{ github.workspace }}\\vcpkg\\"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Create Build Environment
-        run: cmake -E make_directory "${{ github.workspace }}/build"
-
       - name: Configure & Build
-        working-directory: ${{ github.workspace }}/build
+        shell: powershell
         run: |
-          cmake .. -A ARM64 -DBUILD_ARCH=arm64 -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' -DVCPKG_TARGET_TRIPLET=arm64-windows-static -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          mkdir build
+          cd build
+          # ARM64 Cross-Compile erfordert angepassten Triplet und Architektur-Typ
+          cmake .. -A ARM64 `
+            -DBUILD_ARCH=arm64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DUSE_STATIC_LIBS=ON `
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+            -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
           cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
-        shell: powershell
 
       - uses: actions/upload-artifact@v4
         with:
@@ -79,16 +87,13 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev libunwind-dev gperftools libgoogle-perftools-dev
-          wget -qO- "https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB" | sudo apt-key add -
-          sudo sh -c "echo deb https://apt.repos.intel.com/mkl all main > /etc/apt/sources.list.d/intel-mkl.list"
-          sudo apt-get update -o Dir::Etc::sourcelist="/etc/apt/sources.list.d/intel-mkl.list"
-          sudo apt-get install -y --no-install-recommends intel-mkl-64bit-2020.0-088
+          # Fix für Error 100: Wir installieren die modernen, im Standard-Ubuntu enthaltenen Versionen
+          sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev libunwind-dev libgoogle-perftools-dev libmkl-dev
 
       - name: Build & Install
         run: |
           mkdir -p build && cd build
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=ON
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
           cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
 
@@ -98,12 +103,12 @@ jobs:
           path: libs/*
 
   # ----------------------------------------------------
-  # LINUX ARM64 (Nativer ARM-Runner)
+  # LINUX ARM64
   # ----------------------------------------------------
   linux-arm64:
     runs-on: ubuntu-24.04-arm
     name: Build Linux Native Lib (arm64)
-    continue-on-error: true # Falls der ARM-Runner in deiner GitHub-Organisation nicht aktiv ist
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -113,11 +118,13 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev libunwind-dev gperftools || sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev
+          # Fix für Error 2: Explizite Installation aller nötigen Dev-Libraries für ARM ohne MKL
+          sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev libunwind-dev libgoogle-perftools-dev
 
       - name: Build & Install
         run: |
           mkdir -p build && cd build
+          # MKL zwingend aus auf ARM, TCMalloc/Gperftools aktivieren
           cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=OFF
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
           cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
@@ -164,7 +171,7 @@ jobs:
           path: libs/*
 
   # ----------------------------------------------------
-  # .NET PACK & PUBLISH
+  # .NET PACK
   # ----------------------------------------------------
   dotnet:
     runs-on: ubuntu-latest
@@ -175,7 +182,7 @@ jobs:
       - linux-x64
       - linux-arm64
       - macos-arm64
-    if: always() # Läuft immer, egal ob ein nativer Build gefailt ist
+    if: always()
     permissions:
       contents: write
     steps:
