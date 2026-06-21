@@ -5,7 +5,7 @@ on:
 
 jobs:
   # ----------------------------------------------------
-  # WINDOWS X64
+  # WINDOWS X64 (Nutzt automatischen Manifest-Modus)
   # ----------------------------------------------------
   win-x64:
     runs-on: windows-latest
@@ -16,24 +16,27 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Dependencies via vcpkg
-        shell: powershell
-        run: |
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet x64-windows --classic
+      - name: Setup NuGet Cache für vcpkg
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.USERPROFILE }}\AppData\Local\vcpkg\archives
+            ${{ github.workspace }}/build/vcpkg_installed
+          key: vcpkg-win-x64-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-win-x64-
 
       - name: Configure & Build
         shell: powershell
         run: |
           mkdir build
           cd build
-          # Manifest-Mode wird deaktiviert um Konflikte mit vcpkg.json zu vermeiden
+          # Wir überlassen vcpkg komplett die Arbeit über die vcpkg.json im Manifest-Modus
           cmake .. -A x64 `
             -DBUILD_ARCH=corei7-avx `
             -DCMAKE_BUILD_TYPE=Release `
-            -DUSE_STATIC_LIBS=OFF `
-            -DVCPKG_MANIFEST_MODE=OFF `
+            -DUSE_STATIC_LIBS=ON `
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
-            -DVCPKG_TARGET_TRIPLET=x64-windows `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
@@ -42,45 +45,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: libs-win-x64
-          path: libs/*
-
-  # ----------------------------------------------------
-  # WINDOWS ARM64
-  # ----------------------------------------------------
-  win-arm64:
-    runs-on: windows-latest
-    name: Build Windows Native Lib (arm64)
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Install Dependencies via vcpkg
-        shell: powershell
-        run: |
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet arm64-windows --classic
-
-      - name: Configure & Build
-        shell: powershell
-        run: |
-          mkdir build
-          cd build
-          cmake .. -A ARM64 `
-            -DBUILD_ARCH=arm64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DUSE_STATIC_LIBS=OFF `
-            -DVCPKG_MANIFEST_MODE=OFF `
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
-            -DVCPKG_TARGET_TRIPLET=arm64-windows `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
-          
-          cmake --build . --config Release -j3 --target bergamot_translator_dynamic
-          cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: libs-win-arm64
           path: libs/*
 
   # ----------------------------------------------------
@@ -186,7 +150,6 @@ jobs:
     name: Build .NET Lib
     needs:
       - win-x64
-      - win-arm64
       - linux-x64
       - linux-arm64
       - macos-arm64
