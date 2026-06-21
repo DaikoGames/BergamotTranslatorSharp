@@ -5,38 +5,36 @@ on:
 
 jobs:
   # ----------------------------------------------------
-  # WINDOWS X64 (Nutzt automatischen Manifest-Modus)
+  # WINDOWS X64
   # ----------------------------------------------------
   win-x64:
     runs-on: windows-latest
     name: Build Windows Native Lib (x64)
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Setup NuGet Cache für vcpkg
-        uses: actions/cache@v4
+      # Nutzt die offizielle Microsoft-Action für perfektes vcpkg-Caching und Setup
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
         with:
-          path: |
-            ${{ env.USERPROFILE }}\AppData\Local\vcpkg\archives
-            ${{ github.workspace }}/build/vcpkg_installed
-          key: vcpkg-win-x64-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            vcpkg-win-x64-
+          vcpkgDirectory: ${{ env.VCPKG_INSTALLATION_ROOT }}
 
       - name: Configure & Build
         shell: powershell
         run: |
           mkdir build
           cd build
-          # Wir überlassen vcpkg komplett die Arbeit über die vcpkg.json im Manifest-Modus
           cmake .. -A x64 `
             -DBUILD_ARCH=corei7-avx `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
@@ -45,6 +43,46 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: libs-win-x64
+          path: libs/*
+
+  # ----------------------------------------------------
+  # WINDOWS ARM64
+  # ----------------------------------------------------
+  win-arm64:
+    runs-on: windows-latest
+    name: Build Windows Native Lib (arm64)
+    env:
+      VCPKG_DEFAULT_TRIPLET: arm64-windows-static
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ env.VCPKG_INSTALLATION_ROOT }}
+
+      - name: Configure & Build
+        shell: powershell
+        run: |
+          mkdir build
+          cd build
+          cmake .. -A ARM64 `
+            -DBUILD_ARCH=arm64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DUSE_STATIC_LIBS=ON `
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+            -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          
+          cmake --build . --config Release -j3 --target bergamot_translator_dynamic
+          cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libs-win-arm64
           path: libs/*
 
   # ----------------------------------------------------
@@ -150,6 +188,7 @@ jobs:
     name: Build .NET Lib
     needs:
       - win-x64
+      - win-arm64
       - linux-x64
       - linux-arm64
       - macos-arm64
