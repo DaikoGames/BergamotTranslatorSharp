@@ -16,12 +16,17 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install Dependencies via vcpkg
+        shell: powershell
+        run: |
+          # Installiert die für Bergamot zwingend benötigten Pakete für Windows x64
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet x64-windows-static
+
       - name: Configure & Build
         shell: powershell
         run: |
           mkdir build
           cd build
-          # Nutzt die korrekte GitHub-Variable für vcpkg
           cmake .. -A x64 `
             -DBUILD_ARCH=corei7-avx `
             -DCMAKE_BUILD_TYPE=Release `
@@ -50,12 +55,17 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install Dependencies via vcpkg
+        shell: powershell
+        run: |
+          # Installiert die Pakete für den Windows ARM64 Cross-Build
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet arm64-windows-static
+
       - name: Configure & Build
         shell: powershell
         run: |
           mkdir build
           cd build
-          # ARM64 Cross-Compile erfordert angepassten Triplet und Architektur-Typ
           cmake .. -A ARM64 `
             -DBUILD_ARCH=arm64 `
             -DCMAKE_BUILD_TYPE=Release `
@@ -87,7 +97,6 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # Fix für Error 100: Wir installieren die modernen, im Standard-Ubuntu enthaltenen Versionen
           sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev libunwind-dev libgoogle-perftools-dev libmkl-dev
 
       - name: Build & Install
@@ -118,13 +127,11 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          # Fix für Error 2: Explizite Installation aller nötigen Dev-Libraries für ARM ohne MKL
           sudo apt-get install -y libprotobuf-dev protobuf-compiler libboost-all-dev libunwind-dev libgoogle-perftools-dev
 
       - name: Build & Install
         run: |
           mkdir -p build && cd build
-          # MKL zwingend aus auf ARM, TCMalloc/Gperftools aktivieren
           cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_STATIC_LIBS=ON -DUSE_MKL=OFF
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
           cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
