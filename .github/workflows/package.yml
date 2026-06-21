@@ -31,7 +31,6 @@ jobs:
             -DBUILD_ARCH=corei7-avx `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
             -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
@@ -70,7 +69,7 @@ jobs:
             -DBUILD_ARCH=arm64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+            -DUSE_MKL=OFF `
             -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
