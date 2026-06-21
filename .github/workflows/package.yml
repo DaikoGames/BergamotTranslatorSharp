@@ -19,20 +19,21 @@ jobs:
       - name: Install Dependencies via vcpkg
         shell: powershell
         run: |
-          # --classic erzwingt die Installation trotz vorhandener vcpkg.json
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet x64-windows-static --classic
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet x64-windows --classic
 
       - name: Configure & Build
         shell: powershell
         run: |
           mkdir build
           cd build
+          # Manifest-Mode wird deaktiviert um Konflikte mit vcpkg.json zu vermeiden
           cmake .. -A x64 `
             -DBUILD_ARCH=corei7-avx `
             -DCMAKE_BUILD_TYPE=Release `
-            -DUSE_STATIC_LIBS=ON `
+            -DUSE_STATIC_LIBS=OFF `
+            -DVCPKG_MANIFEST_MODE=OFF `
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
@@ -58,8 +59,7 @@ jobs:
       - name: Install Dependencies via vcpkg
         shell: powershell
         run: |
-          # --classic erzwingt die Installation trotz vorhandener vcpkg.json
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet arm64-windows-static --classic
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet arm64-windows --classic
 
       - name: Configure & Build
         shell: powershell
@@ -69,9 +69,10 @@ jobs:
           cmake .. -A ARM64 `
             -DBUILD_ARCH=arm64 `
             -DCMAKE_BUILD_TYPE=Release `
-            -DUSE_STATIC_LIBS=ON `
+            -DUSE_STATIC_LIBS=OFF `
+            -DVCPKG_MANIFEST_MODE=OFF `
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
-            -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
+            -DVCPKG_TARGET_TRIPLET=arm64-windows `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
