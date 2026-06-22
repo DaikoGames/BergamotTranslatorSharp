@@ -68,7 +68,7 @@ jobs:
           mkdir build
           cd build
           
-          # Specifying ARM64 target and scrubbing vector/SIMD loops for safe compilation
+          # COMPILE_AVX=OFF und USE_SSE=OFF zwingen Marian, Intel-Befehle zu deaktivieren
           cmake .. -A ARM64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
@@ -78,6 +78,8 @@ jobs:
             -DUSE_VECTOR_EXTENSIONS=OFF `
             -DENABLE_SIMD=OFF `
             -DCOMPILE_WASM=OFF `
+            -DCOMPILE_AVX=OFF `
+            -DUSE_SSE=OFF `
             "-DCMAKE_CXX_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG" `
             "-DCMAKE_C_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG" `
             "-DVCPKG_MANIFEST_MODE=OFF" `
