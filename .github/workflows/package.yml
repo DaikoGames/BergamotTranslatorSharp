@@ -71,6 +71,9 @@ jobs:
             -DUSE_STATIC_LIBS=ON `
             -DUSE_MKL=OFF `
             -DCOMPILE_CPU=ON `
+            -DCOMPILE_SERVER=OFF `
+            -DUSE_VECTOR_EXTENSIONS=OFF `
+            -DENABLE_SIMD=OFF `
             "-DVCPKG_MANIFEST_MODE=OFF" `
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" `
             -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
@@ -83,7 +86,7 @@ jobs:
         with:
           name: libs-win-arm64
           path: libs/*
-          
+
   # ----------------------------------------------------
   # LINUX X64
   # ----------------------------------------------------
