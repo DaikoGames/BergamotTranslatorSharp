@@ -184,7 +184,7 @@ jobs:
   # MACOS X64
   # ----------------------------------------------------
   macos-x64:
-    runs-on: macos-13
+    runs-on: macos-14-large
     name: Build macOS Native Lib (x64)
     steps:
       - name: Checkout
