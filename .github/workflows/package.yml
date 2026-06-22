@@ -43,11 +43,11 @@ jobs:
           name: libs-win-x64
           path: libs/*
 
- # ----------------------------------------------------
-  # WINDOWS ARM64 (Native Runner Mode)
+  # ----------------------------------------------------
+  # WINDOWS ARM64 (KORRIGIERT GEGEN INTEL INTRINSICS)
   # ----------------------------------------------------
   win-arm64:
-    runs-on: windows-11-arm
+    runs-on: windows-latest
     name: Build Windows Native Lib (arm64)
     steps:
       - name: Checkout
@@ -59,68 +59,32 @@ jobs:
         shell: powershell
         run: |
           $env:VCPKG_REBUILD="true"
-          $env:VCPKG_DEFAULT_TRIPLET="arm64-windows-static"
           & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options pcre2 --triplet arm64-windows-static --classic
-
-      - name: Patch Marian Source Code for ARM64
-        shell: powershell
-        run: |
-          # Pfad zur Problemdatei auflösen
-          $targetFile = "bergamot-translator/3rd_party/marian-dev/src/common/types.h"
-          
-          if (Test-Path $targetFile) {
-              Write-Host "Patching marian-dev types.h to disable forced x86 intrinsics on ARM64..."
-              $content = Get-Content $targetFile
-              
-              # Wir manipulieren die Datei so, dass marian auf ARM64 Windows nicht in den Intel-SSE-Block läuft
-              # Dazu ersetzen wir die fehlerhafte Erkennung durch ein klares "Nein" für SSE
-              $content = $content -replace '#ifDefined\(_MSC_VER\) && !defined\(__clang__\)', '#if defined(_MSC_VER) && !defined(__clang__) && defined(_M_AMD64)'
-              $content = $content -replace '#if _MSC_VER >= 1900', '#if _MSC_VER >= 1900 && defined(_M_AMD64)'
-              
-              Set-Content $targetFile $content
-              Write-Host "Patch applied successfully!"
-          } else {
-              Write-Error "Could not find types.h to patch!"
-          }
 
       - name: Configure & Build
         shell: powershell
         run: |
           mkdir build
           cd build
-          
+          # -DCOMPILE_CPU=ON zwingt marian-dev, den generischen CPU-Pfad ohne Intel-Intrinsics zu kompilieren
           cmake .. -A ARM64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
             -DUSE_MKL=OFF `
             -DCOMPILE_CPU=ON `
-            -DCOMPILE_SERVER=OFF `
-            -DUSE_VECTOR_EXTENSIONS=OFF `
-            -DENABLE_SIMD=OFF `
-            -DCOMPILE_WASM=OFF `
-            -DCOMPILE_AVX=OFF `
-            -DUSE_SSE=OFF `
-            "-DCMAKE_CXX_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG" `
-            "-DCMAKE_C_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG" `
             "-DVCPKG_MANIFEST_MODE=OFF" `
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" `
             -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
-          
-          # Sicherheits-Fix für den DLL-Location-Fehler
-          if (Test-Path "bergamot-translator-dynamic\Release\bergamot.dll") {
-              if (-not (Test-Path "bergamot-translator-dynamic")) { mkdir "bergamot-translator-dynamic" }
-              Copy-Item "bergamot-translator-dynamic\Release\bergamot.dll" "bergamot-translator-dynamic\bergamot.dll" -Force
-          }
-          
           cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
 
       - uses: actions/upload-artifact@v4
         with:
           name: libs-win-arm64
           path: libs/*
+
   # ----------------------------------------------------
   # LINUX X64
   # ----------------------------------------------------
