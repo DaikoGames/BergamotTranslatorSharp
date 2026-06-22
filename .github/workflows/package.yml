@@ -5,7 +5,7 @@ on:
 
 jobs:
   # ----------------------------------------------------
-  # WINDOWS X64 (Restored to your working setup)
+  # WINDOWS X64
   # ----------------------------------------------------
   win-x64:
     runs-on: windows-latest
@@ -19,6 +19,7 @@ jobs:
       - name: Install Dependencies via vcpkg
         shell: powershell
         run: |
+          $env:VCPKG_REBUILD="true"
           & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options gperftools --triplet x64-windows-static --classic
 
       - name: Configure & Build
@@ -30,7 +31,7 @@ jobs:
             -DBUILD_ARCH=corei7-avx `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" `
             -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
@@ -43,7 +44,7 @@ jobs:
           path: libs/*
 
   # ----------------------------------------------------
-  # WINDOWS ARM64 (Isolated & Fixed)
+  # WINDOWS ARM64
   # ----------------------------------------------------
   win-arm64:
     runs-on: windows-latest
@@ -57,11 +58,15 @@ jobs:
       - name: Install Dependencies via vcpkg
         shell: powershell
         run: |
+          # Force vcpkg to build dependencies from source code for ARM64 target
+          $env:VCPKG_REBUILD="true"
           & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options --triplet arm64-windows-static --classic
 
       - name: Configure & Build
         shell: powershell
         run: |
+          # Force manifest off to drop x64-only intel-mkl restriction
+          $env:VCPKG_MANIFEST_MODE="false"
           mkdir build
           cd build
           cmake .. -A ARM64 `
@@ -69,7 +74,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
             -DUSE_MKL=OFF `
-            -DVCPKG_MANIFEST_MODE=OFF `
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" `
             -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
@@ -141,7 +146,7 @@ jobs:
           path: libs/*
 
   # ----------------------------------------------------
-  # MACOS ARM64 (Original)
+  # MACOS ARM64
   # ----------------------------------------------------
   macos-arm64:
     runs-on: macos-latest
