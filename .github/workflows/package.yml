@@ -43,7 +43,7 @@ jobs:
           name: libs-win-x64
           path: libs/*
 
-  # ----------------------------------------------------
+ # ----------------------------------------------------
   # WINDOWS ARM64 (Native Runner Mode)
   # ----------------------------------------------------
   win-arm64:
@@ -68,7 +68,7 @@ jobs:
           mkdir build
           cd build
           
-          # COMPILE_AVX=OFF und USE_SSE=OFF zwingen Marian, Intel-Befehle zu deaktivieren
+          # Wir fügen CMAKE_LIBRARY_OUTPUT_DIRECTORY hinzu, um MSVC-Unterordner zu umgehen!
           cmake .. -A ARM64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
@@ -80,6 +80,9 @@ jobs:
             -DCOMPILE_WASM=OFF `
             -DCOMPILE_AVX=OFF `
             -DUSE_SSE=OFF `
+            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=." `
+            "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=." `
+            "-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=." `
             "-DCMAKE_CXX_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG" `
             "-DCMAKE_C_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG" `
             "-DVCPKG_MANIFEST_MODE=OFF" `
@@ -88,6 +91,12 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
           
           cmake --build . --config Release -j3 --target bergamot_translator_dynamic
+          
+          # Sicherheitsnetz: Falls MSVC die DLL trotzdem in /Release/ abgelegt hat, kopieren wir sie hoch!
+          if (Test-Path "bergamot-translator-dynamic\Release\bergamot.dll") {
+              Move-Item "bergamot-translator-dynamic\Release\bergamot.dll" "bergamot-translator-dynamic\" -Force
+          }
+          
           cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
 
       - uses: actions/upload-artifact@v4
@@ -95,6 +104,7 @@ jobs:
           name: libs-win-arm64
           path: libs/*
 
+          
   # ----------------------------------------------------
   # LINUX X64
   # ----------------------------------------------------
