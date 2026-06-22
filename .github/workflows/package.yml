@@ -58,15 +58,12 @@ jobs:
       - name: Install Dependencies via vcpkg
         shell: powershell
         run: |
-          # Force vcpkg to build dependencies from source code for ARM64 target
           $env:VCPKG_REBUILD="true"
           & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options --triplet arm64-windows-static --classic
 
       - name: Configure & Build
         shell: powershell
         run: |
-          # Force manifest off to drop x64-only intel-mkl restriction
-          $env:VCPKG_MANIFEST_MODE="false"
           mkdir build
           cd build
           cmake .. -A ARM64 `
@@ -74,6 +71,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
             -DUSE_MKL=OFF `
+            "-DVCPKG_MANIFEST_MODE=OFF" `
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" `
             -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
