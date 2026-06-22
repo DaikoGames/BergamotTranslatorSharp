@@ -1,4 +1,4 @@
-name: Package
+Name: Package
 
 on:
   workflow_dispatch:
@@ -181,6 +181,42 @@ jobs:
           path: libs/*
 
   # ----------------------------------------------------
+  # MACOS X64
+  # ----------------------------------------------------
+  macos-x64:
+    runs-on: macos-13
+    name: Build macOS Native Lib (x64)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: brew install protobuf boost cmake llvm@18 gperftools
+
+      - name: Build & Install
+        run: |
+          LLVM_PREFIX="$(brew --prefix llvm@18)"
+          GPERFTOOLS_PREFIX="$(brew --prefix gperftools)"
+          mkdir -p build && cd build
+          cmake .. \
+            -DCMAKE_C_COMPILER="$LLVM_PREFIX/bin/clang" \
+            -DCMAKE_CXX_COMPILER="$LLVM_PREFIX/bin/clang++" \
+            -DGPERFTOOLS_ROOT="$GPERFTOOLS_PREFIX" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_STATIC_LIBS=ON \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DGIT_SUBMODULE=OFF
+          cmake --build . --config Release -j3 --target bergamot_translator_dynamic
+          cmake --install . --prefix "../libs" --component bergamot_translator_dynamic
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libs-macos-x64
+          path: libs/*
+
+  # ----------------------------------------------------
   # .NET PACK
   # ----------------------------------------------------
   dotnet:
@@ -192,6 +228,7 @@ jobs:
       - linux-x64
       - linux-arm64
       - macos-arm64
+      - macos-x64
     if: always()
     permissions:
       contents: write
