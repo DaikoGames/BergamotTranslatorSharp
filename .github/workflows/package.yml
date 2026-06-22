@@ -59,6 +59,7 @@ jobs:
         shell: powershell
         run: |
           $env:VCPKG_REBUILD="true"
+          $env:VCPKG_DEFAULT_TRIPLET="arm64-windows-static"
           & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options pcre2 --triplet arm64-windows-static --classic
 
       - name: Configure & Build
@@ -66,6 +67,8 @@ jobs:
         run: |
           mkdir build
           cd build
+          
+          # Force CMake to scrub out any x86/x64 optimization flags injected by submodules
           cmake .. -A ARM64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
@@ -74,6 +77,9 @@ jobs:
             -DCOMPILE_SERVER=OFF `
             -DUSE_VECTOR_EXTENSIONS=OFF `
             -DENABLE_SIMD=OFF `
+            -DCOMPILE_WASM=OFF `
+            "-DCMAKE_CXX_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG" `
+            "-DCMAKE_C_FLAGS_RELEASE=/MD /O2 /Ob2 /DNDEBUG" `
             "-DVCPKG_MANIFEST_MODE=OFF" `
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" `
             -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
