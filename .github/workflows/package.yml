@@ -44,10 +44,10 @@ jobs:
           path: libs/*
 
   # ----------------------------------------------------
-  # WINDOWS ARM64
+  # WINDOWS ARM64 (Native Runner Mode)
   # ----------------------------------------------------
   win-arm64:
-    runs-on: windows-latest
+    runs-on: windows-11-arm
     name: Build Windows Native Lib (arm64)
     steps:
       - name: Checkout
@@ -68,7 +68,7 @@ jobs:
           mkdir build
           cd build
           
-          # Force CMake to scrub out any x86/x64 optimization flags injected by submodules
+          # Specifying ARM64 target and scrubbing vector/SIMD loops for safe compilation
           cmake .. -A ARM64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
