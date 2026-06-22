@@ -59,7 +59,6 @@ jobs:
         shell: powershell
         run: |
           $env:VCPKG_REBUILD="true"
-          # pcre2 wurde hier hinzugefügt, damit es für ssplit-cpp nativ gebaut wird
           & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options pcre2 --triplet arm64-windows-static --classic
 
       - name: Configure & Build
@@ -68,10 +67,10 @@ jobs:
           mkdir build
           cd build
           cmake .. -A ARM64 `
-            -DBUILD_ARCH=arm64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DUSE_STATIC_LIBS=ON `
             -DUSE_MKL=OFF `
+            -DCOMPILE_CPU=ON `
             "-DVCPKG_MANIFEST_MODE=OFF" `
             "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" `
             -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
@@ -84,7 +83,7 @@ jobs:
         with:
           name: libs-win-arm64
           path: libs/*
-
+          
   # ----------------------------------------------------
   # LINUX X64
   # ----------------------------------------------------
