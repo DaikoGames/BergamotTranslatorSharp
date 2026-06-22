@@ -59,7 +59,8 @@ jobs:
         shell: powershell
         run: |
           $env:VCPKG_REBUILD="true"
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options --triplet arm64-windows-static --classic
+          # pcre2 wurde hier hinzugefügt, damit es für ssplit-cpp nativ gebaut wird
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install protobuf boost-system boost-thread boost-program-options pcre2 --triplet arm64-windows-static --classic
 
       - name: Configure & Build
         shell: powershell
